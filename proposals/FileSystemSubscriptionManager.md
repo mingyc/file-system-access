@@ -46,7 +46,7 @@ There are existing mechanisms to auto wake up new service workers. Hence the nex
 
 The [ServiceWorkerRegistration][swr] interface represents registration of a service worker for a specific origin and scope. The browser maintains a persistent list of active ServiceWorkerRegistration even when the associated service worker is not actively running, and will wake up new service workers if a registered event happens.
 
-There is already existing example utilizing the interface to receive notifications.
+There are already existing APIs utilizing the interface to receive notifications.
 For example, `ServiceWorkerRegistration.pushManager` is the [PushManager] from the Push API that allows subscription to a push service.
 
 This doc below proposes a similar interface under ServiceWorkerRegistration to allow subscribing to file system change events.
@@ -75,11 +75,11 @@ It supports `subscribe()` and `unsubcribe()` to a `FileSystemHandle`, with [`Fil
 interface FileSystemSubscriptionManager {
   // Subscribes to changes to a FileSystemHandle with the browser with specific
   // options. Returns a Promise that resolves when the subscription completes.
-  Promise<void> subscribe(FileSystemHandle handle,
+  Promise<undefined> subscribe(FileSystemHandle handle,
                           FileSystemObserverObserveOptions options = {});
   // Unsubscribes to changes to a FileSystemHandle. Returns a Promise that
   // resolves when the unsubscription completes.
-  Promise<void> unsubscribe(FileSystemHandle handle);
+  Promise<undefined> unsubscribe(FileSystemHandle handle);
   // Returns a Promise that resolves with a list of FileSystemSubscription
   // representing all the current file system subscriptions with the browser.
   Promise<sequence<FileSystemSubscription>> getSubscriptions();
@@ -89,12 +89,12 @@ interface FileSystemSubscriptionManager {
 ```webidl
 // Represents a subscription to changes to a FileSystemHandle.
 dictionary FileSystemSubscription {
-  required FileSystemHandle handle;
-  FileSystemObserverObserveOptions? options = null;
+  FileSystemHandle handle;
+  FileSystemObserverObserveOptions options;
 };
 ```
 
-Second, allow service workers to fire a new type of event FileSystemChangeEvent, which includes a list of [`FileSystemChangeRecord`](https://whatpr.org/fs/165.html#dictdef-filesystemchangerecord).
+Second, allow service workers to fire a new type of event `FileSystemChangeEvent`, which includes a list of [`FileSystemChangeRecord`](https://whatpr.org/fs/165.html#dictdef-filesystemchangerecord).
 
 ```webidl
 partial interface ServiceWorkerGlobalScope {
