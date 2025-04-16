@@ -107,7 +107,7 @@ partial interface ServiceWorkerGlobalScope {
 // Represents a file system change event.
 interface FileSystemChangeEvent : ExtendableEvent {
   constructor(DOMString type, FileSystemChangeEventInit init);
-  readonly attribute FrozenArray<FileSystemChangeRecord> records;
+  sequence<FileSystemChangeRecord> records();
 };
 
 interface FileSystemChangeEventInit : ExtendableEvent {
@@ -129,11 +129,11 @@ async function observeFileChanges(fileHandle) {
 self.addEventListener('filesystemchange', event => {
   // The change record includes a handle detailing which file has changed, which
   // in this case corresponds to the observed handle.
-  const changedFileHandle = records[0].changedHandle;
+  const changedFileHandle = event.records()[0].changedHandle;
 
   // Since we're observing changes to a file, the `root` of the change
   // record also corresponds to the observed file.
-  assert(await changedFileHandle.isSameEntry(records[0].root));
+  assert(await changedFileHandle.isSameEntry(event.records()[0].root));
 
   // Do something.
   handleFile(changedFileHandle);
@@ -152,7 +152,7 @@ async function observeDirectoryChanges(directoryHandle) {
 
 // service-worker.js
 self.addEventListener('filesystemchange', event => {
-  for (const record of event.records) {
+  for (const record of event.records()) {
     if (record.type == "appeared" || record.type == "modified") {
       // Backs up changed files.
       backupFile(record.changedHandle);
