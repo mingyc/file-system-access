@@ -2,8 +2,8 @@
 
 ## Authors
 
-* Ming-Ying Chung (<mych@google.com>)
-* Austin Sullivan (<asully@google.com>)
+* [Ming-Ying Chung](https://github.com/mingyc) (Google)
+* [Austin Sullivan](https://github.com/a-sully) (Google)
 
 ## Background
 
@@ -19,20 +19,22 @@ Allow web applications that do not have an open tab to quickly respond to change
 
 ## Discussion
 
-### Option 1. Enabling FileSystemObserver in Service Worker
+### Option 1. Updating FileSystemObserver API to outlive Service Worker
+
+#### Enabling FileSystemObserver in Service Worker
 
 By [current design][fso], an instance of FileSystemObserver should only report changes which occur while the observer is connected and the website has an open & active tab.
 
 Enabling creations of FileSystemObserver in ServiceWorker will tie its lifetime with ServiceWorkerGlobalScope. Users might expect such observers to continue to watch files in the background. However, in browser implementation, service workers that haven’t received new events in a certain period of time, e.g. [30s in Chrome][chrome-sw], will likely be terminated.
 
-Hence, this approach might only work for websites that either can ensure a long-running service worker or are not really interested in using service worker registration for observing the file change events after the websites are closed.
+Hence, simply enabling it doesn't satisfy the goal. This approach might only work for websites that either can ensure a long-running service worker or are not really interested in using service worker registration for observing the file change events after the websites are closed.
 
-[fso]: https://docs.google.com/document/d/11o4HaslFwQxKIjJw0M9LAkkZp2ikCNwA9vvYsjA657w/edit?tab=t.0#heading=h.kktfoyrlhtnv
+[fso]: https://github.com/whatwg/fs/blob/main/proposals/FileSystemObserver.md#handling-changes-made-outside-the-lifetime-of-a-filesystemobserver
 [chrome-sw]: https://developer.chrome.com/blog/longer-esw-lifetimes#background
 
-### Option 2. Updating FileSystemObserver API to outlive Service Worker
+#### Outliving Service Worker
 
-Another approach is to ask what if updating FileSystemObserver to allow it to outlive without the limit of running in ServiceWorkerGlobalScope?
+What if updating FileSystemObserver to allow it to outlive without the limit of running in ServiceWorkerGlobalScope?
 
 If such an option is implemented, there needs to be mechanisms to
 Tell when the browser should stop watching file changes.
@@ -40,7 +42,7 @@ Handle file changes happen after the service worker is already terminated but th
 
 There are existing mechanisms to auto wake up new service workers. Hence the next option.
 
-### Option 3. Utilizing Service Worker Registration
+### Option 2. Utilizing Service Worker Registration
 
 The ServiceWorkerRegistration interface represents registration of a service worker for a specific origin and scope. The browser maintains a persistent list of active ServiceWorkerRegistration even when the associated service worker is not actively running, and will wake up new service workers if a registered event happens.
 
