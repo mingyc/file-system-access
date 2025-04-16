@@ -7,11 +7,12 @@
 
 ## Background
 
-The [FileSystemObserver API][fso-api] allows browsing context to receive records of changes for the observed files or directories. However, changes which occur while the website has no open tabs are not visible to the website.
+The [FileSystemObserver API][fso-api] ([spec][fso-spec]) allows browsing context to receive records of changes for the observed files or directories. However, changes which occur while the website has no open tabs are not visible to the website.
 
 This document proposes integrating file system change observing with service worker registration, such that a service worker may be woken up on a change to the local file system.
 
 [fso-api]: https://chromestatus.com/feature/4622243656630272
+[fso-spec]: https://whatpr.org/fs/165.html#filesystemobserver
 
 ## Goal
 
@@ -36,23 +37,30 @@ Hence, simply enabling it doesn't satisfy the goal. This approach might only wor
 
 What if updating FileSystemObserver to allow it to outlive without the limit of running in ServiceWorkerGlobalScope?
 
-If such an option is implemented, there needs to be mechanisms to
-Tell when the browser should stop watching file changes.
+If such an option is implemented, there needs to be mechanisms to tell when the browser should stop watching file changes.
 Handle file changes happen after the service worker is already terminated but the website is still open. Possibly needs a way to wake up a new service worker.
 
 There are existing mechanisms to auto wake up new service workers. Hence the next option.
 
 ### Option 2. Utilizing Service Worker Registration
 
-The ServiceWorkerRegistration interface represents registration of a service worker for a specific origin and scope. The browser maintains a persistent list of active ServiceWorkerRegistration even when the associated service worker is not actively running, and will wake up new service workers if a registered event happens.
+The [ServiceWorkerRegistration][swr] interface represents registration of a service worker for a specific origin and scope. The browser maintains a persistent list of active ServiceWorkerRegistration even when the associated service worker is not actively running, and will wake up new service workers if a registered event happens.
+
+There is already existing example utilizing the interface to receive notifications.
+For example, `ServiceWorkerRegistration.pushManager` is the [PushManager] from the Push API that allows subscription to a push service.
+
+This doc below proposes a similar interface under ServiceWorkerRegistration to allow subscribing to file system change events.
+
+[swr]: https://developer.mozilla.org/en-US/docs/Web/API/ServiceWorkerRegistration
+[PushManager]: https://developer.mozilla.org/en-US/docs/Web/API/PushManager
 
 ## Proposed API
 
 ### Web IDL
 
-First, define a new interface FileSystemSubscriptionManager that will be held under every ServiceWorkerRegistration, which manages subscriptions to changes to file systems:
+First, define a new interface `FileSystemSubscriptionManager` that will be held under every ServiceWorkerRegistration, which manages subscriptions to changes to file systems:
 
-```idl
+```webidl
 partial interface ServiceWorkerRegistration {
   // Returns a reference to FileSystemSubscriptionManager interface, which allows
   // for subscribing to specific file changes.
@@ -60,13 +68,15 @@ partial interface ServiceWorkerRegistration {
 };
 ```
 
-```idl
+It supports `subscribe()` and `unsubcribe()` to a `FileSystemHandle`, with [`FileSystemObserverObserveOptions`](https://whatpr.org/fs/165.html#dictdef-filesystemobserverobserveoptions).
+
+```webidl
 // Provides methods for managing file system subscriptions.
 interface FileSystemSubscriptionManager {
   // Subscribes to changes to a FileSystemHandle with the browser with specific
   // options. Returns a Promise that resolves when the subscription completes.
   Promise<void> subscribe(FileSystemHandle handle,
-                          FileSystemObserverObserverOptions options = {});
+                          FileSystemObserverObserveOptions options = {});
   // Unsubscribes to changes to a FileSystemHandle. Returns a Promise that
   // resolves when the unsubscription completes.
   Promise<void> unsubscribe(FileSystemHandle handle);
@@ -76,33 +86,58 @@ interface FileSystemSubscriptionManager {
 };
 ```
 
-```idl
+```webidl
 // Represents a subscription to changes to a FileSystemHandle.
-interface FileSystemSubscription {
+dictionary FileSystemSubscription {
   required FileSystemHandle handle;
-  FileSystemObserverObserverOptions? options = null;
+  FileSystemObserverObserveOptions? options = null;
 };
 ```
 
-Second, allow service workers to fire a new type of event FileSystemChangeEvent, which includes a list of FileSystemChangeRecord.
+Second, allow service workers to fire a new type of event FileSystemChangeEvent, which includes a list of [`FileSystemChangeRecord`](https://whatpr.org/fs/165.html#dictdef-filesystemchangerecord).
 
-```idl
+```webidl
 partial interface ServiceWorkerGlobalScope {
   // Fired when FileSystemSubscriptionManager observes changes.
   attribute EventHandler attribute onfilesystemchange;
 };
 ```
 
-```idl
+```webidl
 // Represents a file system change event.
 interface FileSystemChangeEvent : ExtendableEvent {
   constructor(DOMString type, FileSystemChangeEventInit init);
-  readonly attribute sequence<FileSystemChangeRecord> records;
+  readonly attribute FrozenArray<FileSystemChangeRecord> records;
 };
 
 interface FileSystemChangeEventInit : ExtendableEvent {
   required sequence<FileSystemChangeRecord> records;
 }
+```
+
+### Example: Observing Changes to a File
+
+```javascript
+// main.js
+const fileHandle = await window.showOpenFilePicker();
+async function observeFileChanges(fileHandle) {
+  const registration = await navigator.ServiceWorker.register("/service-worker.js");
+  registration.fileSystem.subscribe(fileHandle);
+}
+
+// service-worker.js
+self.addEventListener('filesystemchange', event => {
+  // The change record includes a handle detailing which file has changed, which
+  // in this case corresponds to the observed handle.
+  const changedFileHandle = records[0].changedHandle;
+
+  // Since we're observing changes to a file, the `root` of the change
+  // record also corresponds to the observed file.
+  assert(await changedFileHandle.isSameEntry(records[0].root));
+
+  // Do something.
+  handleFile(changedFileHandle);
+});
 ```
 
 ### Example: Observing Changes to a Directory
@@ -116,10 +151,12 @@ async function observeDirectoryChanges(directoryHandle) {
 }
 
 // service-worker.js
-self.addEventListener('onfilesystemchange', event => {
+self.addEventListener('filesystemchange', event => {
   for (const record of event.records) {
-    assert(await directoryHandle.IsSameEntry(record.root));
-    handleRecord(record);
+    if (record.type == "appeared" || record.type == "modified") {
+      // Backs up changed files.
+      backupFile(record.changedHandle);
+    }
   }
 });
 ```
